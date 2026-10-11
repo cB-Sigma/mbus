@@ -1,0 +1,16 @@
+github.com/cB-Sigma/dlms v0.1.0 h1:djIVM0ph6mRu0hscw5w1c5hVRS8Q1Q63nxVORiaT7eo=
+github.com/cB-Sigma/dlms v0.1.0/go.mod h1:rs2rIK843IcR1A5eyWI187eRmVD2BFznVF/veqPXNoM=
+github.com/cB-Sigma/iotcrypto v0.1.1 h1:3ifhrE8JPc3TaVIEqja+svXc7sBfY6u5/I5QFholCfY=
+github.com/cB-Sigma/iotcrypto v0.1.1/go.mod h1:SlKPoP00OgqfMJpaa+fNq0aqcoFhGU3NpyKCJ7UtR4g=
+github.com/cB-Sigma/tlsx v0.6.0 h1:P76L+FQdYrHlTI4LyzHRWDeK1F4vom7odZoLD0bhwTA=
+github.com/cB-Sigma/tlsx v0.6.0/go.mod h1:Ce5ibf1UB1/NcyWm2bcnW49nj0vP4b9KzfaOf3rNpx0=
+github.com/goburrow/serial v0.1.0 h1:v2T1SQa/dlUqQiYIT8+Cu7YolfqAi3K96UmhwYyuSrA=
+github.com/goburrow/serial v0.1.0/go.mod h1:sAiqG0nRVswsm1C97xsttiYCzSLBmUZ/VSlVLZJ8haA=
+golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
+golang.org/x/crypto v0.57.0/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
+golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
+golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=

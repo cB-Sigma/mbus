@@ -1,0 +1,90 @@
+mbus (wired and wireless M-Bus, OMS and the M-Bus adaptation layer, in Go)
+Copyright 2026 Abhinav Gautam
+
+This module is licensed under the Apache License, Version 2.0 (LICENSE).
+
+The code was written for SigmaM2M, a oneM2M platform, from the published
+standards listed in PROVENANCE.md. It contains no code from other projects. The source files
+that come from SigmaM2M carry no per-file copyright header (the
+convention of the code they come from); the copyright line above covers
+them. Files added for this module carry "Copyright 2026 Abhinav Gautam"
+and "SPDX-License-Identifier: Apache-2.0".
+
+Specification data
+------------------
+
+records/annexh.yaml holds the translation of M-Bus data records to OBIS
+codes of EN 13757-3:2025 annex H as facts (medium, quantity, modifiers,
+storage, OBIS value groups, with the table rows each rule stands for),
+written against this package's own quantity names. records/vif_tables.go
+holds the VIF and VIFE codes of EN 13757-3:2025 clause 6.4 with names
+and units in our own words. No text of the standards is reproduced, and
+none of them is redistributed. See PROVENANCE.md.
+
+Test data from third parties
+----------------------------
+
+libmbus (https://github.com/rscada/libmbus)
+Copyright (c) 2010-2012, Raditex Control AB
+All rights reserved.
+  - wired/heat_test.go: the heat meter answers kamstrup_multical_601.hex,
+    sen_pollutherm.hex, EFE_Engelmann-Elster-SensoStar-2.hex (its data
+    records) and two records of landis+gyr_ultraheat_t230.hex from the
+    project's test/test-frames, used as test data; the expected values
+    were checked against the suite's .norm.xml files. No libmbus code is
+    included. libmbus also asks that rSCADA and Raditex Control be given
+    credit in work based on it; they are credited here.
+  Used under the BSD 3-Clause License:
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions
+    are met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+    * Neither the name of the copyright holder nor the names of its
+      contributors may be used to endorse or promote products derived from
+      this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Other test vectors are the worked examples of the standards and
+specifications (see PROVENANCE.md): EN 13757-3:2025 annexes F and G, the
+example frames of OMS Specification Volume 2 annex N, the example
+telegrams of the M-Bus documentation (m-bus.com), RFC 3610, RFC 4493 and
+RFC 5649 vectors, and telegrams written for these tests. The keys in the
+tests and examples are test values.
+
+Dependencies
+------------
+
+- github.com/cB-Sigma/tlsx v0.6.0 (wireless, security mode 13
+  TLS): a fork of Go's crypto/tls, Copyright The Go Authors, changes and
+  additions Copyright 2026 Abhinav Gautam; BSD-3-Clause with Google's
+  patent grant (its LICENSE, PATENTS, NOTICE and PROVENANCE.md). It
+  requires Go 1.27.1, hence this module's go directive.
+- github.com/goburrow/serial v0.1.0 (wired, OpenSerial): MIT License,
+  Copyright (c) 2015 Quoc-Viet Nguyen.
+- gopkg.in/yaml.v3 v3.0.1 (records reads annexh.yaml): MIT and
+  Apache-2.0 (see its LICENSE and NOTICE).
+- github.com/cB-Sigma/dlms (records uses its obis package) and
+  github.com/cB-Sigma/iotcrypto (wireless and mbal use its ccm package):
+  Apache-2.0, Copyright 2026 Abhinav Gautam; see their NOTICE files.
+- golang.org/x/crypto and golang.org/x/sys (through tlsx and iotcrypto):
+  BSD-3-Clause, Copyright The Go Authors.
+- Otherwise the Go standard library only.

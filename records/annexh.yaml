@@ -1,0 +1,87 @@
+# EN 13757-3:2025 annex H (normative): translation of M-Bus data records
+# to OBIS codes (H.2, Tables H.2 to H.10), as data. Transcribed as facts
+# from a licensed copy; the rules are
+# written against the records as this package decodes them (quantity names
+# and VIFE modifiers of records.go and vif_tables.go) rather than as the
+# printed bit patterns, and each rule names the table rows it stands for.
+#
+# A rule matches a record when the medium (value group A, from the device
+# type), the quantity and the modifiers (exactly) match, the function is
+# instantaneous, the tariff is 0 and the storage is what "storage" says:
+#   current  storage 0; F is 255
+#   set      storage 1 (the set date value); F is 255
+#   vz       storage 0 (F 255) or 1 to 99, 101 to 125 (F = storage, VZ)
+#   dated    storage 1 to 99, 101 to 125 only (F = storage)
+# B is the record's subunit (H.2). cd is "C.D.E".
+# Source defects: F-1208, F-1209, F-1300 to F-1303.
+
+# Device type (EN 13757-7:2025 Table 13) to value group A.
+media:
+  - {dev: [0x02], a: 1}                  # H.3 electricity
+  - {dev: [0x08], a: 4}                  # H.4 heat cost allocator
+  - {dev: [0x0A, 0x0B], a: 5}            # H.5 cooling
+  - {dev: [0x04, 0x0C, 0x0D], a: 6}      # H.7 heat (0Dh: H.6 for its cooling records)
+  - {dev: [0x03], a: 7}                  # H.8 gas
+  - {dev: [0x07], a: 8}                  # H.9 cold water
+  - {dev: [0x06, 0x15], a: 9}            # H.10 hot and warm water
+
+rules:
+  # H.2 general data, all media (A 0).
+  - {t: H.2, a: [any], q: customer, storage: current, obis: "0.x.96.1.9"}
+  - {t: H.2, a: [any], q: customer_location, storage: current, obis: "0.x.96.1.10"}
+  - {t: H.2, a: [any], q: fabrication_number, storage: current, obis: "0.x.96.1.0"}
+
+  # H.3 electricity.
+  - {t: H.3, a: [1], q: energy, storage: vz, cd: "1.8.0"}
+  - {t: H.3, a: [1], q: energy, mods: [backward], storage: vz, cd: "2.8.0"}
+  - {t: H.3, a: [1], q: datetime, storage: current, cd: "0.9.1"}
+  - {t: H.3, a: [1], q: date, storage: current, cd: "0.9.2"}
+  - {t: H.3, a: [1], q: actuality_duration, storage: current, cd: "0.1.2"}
+  - {t: H.3, a: [1], q: date, storage: dated, cd: "0.1.2"}
+  - {t: H.3, a: [1], q: datetime, storage: dated, cd: "0.1.2"}
+  - {t: H.3, a: [1], q: averaging_duration, storage: current, cd: "0.8.0"}
+
+  # H.4 heat cost allocator.
+  - {t: H.4, a: [4], q: hca_units, storage: current, cd: "1.0.0"}
+  - {t: H.4, a: [4], q: hca_units, storage: set, cd: "1.2.0"}
+  - {t: H.4, a: [4], q: rating_factor_k, storage: current, cd: "0.4.0"}
+  - {t: H.4, a: [4], q: rating_factor_kq, storage: current, cd: "0.4.1"}
+  - {t: H.4, a: [4], q: rating_factor_kc, storage: current, cd: "0.4.2"}
+  - {t: H.4, a: [4], q: rating_factor_kcr, storage: current, cd: "0.4.3"}
+  - {t: H.4, a: [4], q: rating_factor_kch, storage: current, cd: "0.4.4"}
+  - {t: H.4, a: [4], q: rating_factor_kt, storage: current, cd: "0.4.5"}
+  - {t: H.4, a: [4], q: rating_factor_kd, storage: current, cd: "0.4.6"}
+
+  # H.5 cooling, H.6 cooling of combined meters, H.7 heat.
+  - {t: H.5 H.7, a: [5, 6], q: energy, storage: current, cd: "1.0.0"}
+  - {t: H.5 H.7, a: [5, 6], q: energy, storage: set, cd: "1.2.0"}
+  - {t: H.5 H.7, a: [5, 6], q: power, storage: current, cd: "8.0.0"}
+  - {t: H.5 H.7, a: [5, 6], q: volume_flow, unit: m3/h, storage: current, cd: "9.0.0"}
+  - {t: H.5 H.7, a: [5, 6], q: averaging_duration, storage: current, cd: "0.8.5"}
+
+  # H.8 gas: volume at metering conditions (uncorrected), temperature
+  # converted (plain VIF) and at base conditions; flow rate likewise.
+  - {t: H.8, a: [7], q: volume, mods: [uncorrected], storage: vz, cd: "3.0.0"}
+  - {t: H.8, a: [7], q: volume, storage: vz, cd: "3.1.0"}
+  - {t: H.8, a: [7], q: volume, mods: [base_conditions], storage: vz, cd: "3.2.0"}
+  - {t: H.8, a: [7], q: volume_flow, unit: m3/h, mods: [uncorrected], storage: current, cd: "43.15.0"}
+  - {t: H.8, a: [7], q: volume_flow, unit: m3/h, storage: current, cd: "43.16.0"}
+  - {t: H.8, a: [7], q: volume_flow, unit: m3/h, mods: [base_conditions], storage: current, cd: "43.17.0"}
+  - {t: H.8, a: [7], q: flow_temperature, mods: [base_conditions], storage: current, cd: "41.2.0"}
+  - {t: H.8, a: [7], q: pressure, mods: [base_conditions], storage: current, cd: "42.2.0"}
+  - {t: H.8, a: [7], q: actuality_duration, storage: current, cd: "0.1.2"}
+  - {t: H.8, a: [7], q: date, storage: dated, cd: "0.1.2"}
+  - {t: H.8, a: [7], q: datetime, storage: dated, cd: "0.1.2"}
+  - {t: H.8, a: [7], q: averaging_duration, storage: current, cd: "0.8.28"}
+
+  # H.9 cold water, H.10 hot water.
+  - {t: H.9 H.10, a: [8, 9], q: volume, storage: current, cd: "1.0.0"}
+  - {t: H.9 H.10, a: [8, 9], q: volume, storage: set, cd: "1.2.0"}
+  - {t: H.9 H.10, a: [8, 9], q: volume_flow, unit: m3/h, storage: current, cd: "2.0.0"}
+  - {t: H.9 H.10, a: [8, 9], q: averaging_duration, storage: current, cd: "0.8.6"}
+
+  # Device time and dates, H.4 to H.10.
+  - {t: H.4 to H.10, a: [4, 5, 6, 7, 8, 9], q: datetime, storage: current, cd: "0.9.1"}
+  - {t: H.4 to H.10, a: [4, 5, 6, 7, 8, 9], q: date, storage: current, cd: "0.9.2"}
+  - {t: H.4 H.5 H.7 H.9 H.10, a: [4, 5, 6, 8, 9], q: actuality_duration, storage: current, cd: "0.9.3"}
+  - {t: H.4 H.5 H.7 H.9 H.10, a: [4, 5, 6, 8, 9], q: date, storage: set, cd: "0.1.10"}
