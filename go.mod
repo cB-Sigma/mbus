@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/cB-Sigma/dlms v0.1.0
-	github.com/cB-Sigma/iotcrypto v0.1.1
+	github.com/cB-Sigma/iotcrypto v0.1.0
 	github.com/cB-Sigma/tlsx v0.6.0
 	github.com/goburrow/serial v0.1.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -662,3 +662,16 @@ func (m *Master) ImageCommand(ctx context.Context, a byte, hdr []byte, seg Segme
 	}
 	return Segment{}, fmt.Errorf("the response has no segment %d", seg.ID)
 }
+
+// Repeater sends a management frame to the primary master repeater at
+// address 251 (EN 13757-2:2018+A1:2023, 5.7.5) and returns its answer
+// (none when answer is false). The standard reserves the address but
+// leaves the commands to the repeater's maker, so c, ci and data are the
+// caller's: a short frame when ci is 0 and data empty, else a long one.
+func (m *Master) Repeater(ctx context.Context, c, ci byte, data []byte, answer bool) (Frame, error) {
+	f := Frame{C: c, A: AddrRepeater}
+	if ci != 0 || len(data) > 0 {
+		f.Long, f.CI, f.Data = true, ci, data
+	}
+	return m.Exchange(ctx, f, answer)
+}

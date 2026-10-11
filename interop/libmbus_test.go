@@ -380,6 +380,11 @@ func compareRecord(g records.Record, w lmRecord) (why, cat string) {
 
 // compareValue compares a record's value with libmbus's normalised one.
 func compareValue(g records.Record, w lmRecord) string {
+	if g.Manufacturer && g.BaseValue != nil {
+		// A manufacturer VIFE after a standard VIF: compare the value the
+		// VIF gives (records.Record.BaseValue), as libmbus decodes it.
+		g.Value = g.BaseValue
+	}
 	desc := fmt.Sprintf("ours %s=%q %s, libmbus %q=%q %q", g.Name(), fmt.Sprint(g.Value), g.Unit, w.Quantity, w.Value, w.Unit)
 	switch v := g.Value.(type) {
 	case float64, int64:

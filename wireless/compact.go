@@ -361,6 +361,13 @@ const DefaultFormatCacheSize = 1024
 // for concurrent use. The wireless driver persists it (SavedFormat); the
 // wired M-Bus IPE may use one in memory.
 type FormatCache struct {
+	// IgnoreFullFrameCRC rebuilds a compact frame whose rebuilt records
+	// fail the Full-Frame-CRC anyway (as wmbusmeters does, which does not
+	// check it), and keeps the format. Off by default: the CRC is what
+	// tells an outdated format from the right one. A frame let through
+	// this way carries a warning (CompactInfo.Warning, Telegram.Warnings).
+	IgnoreFullFrameCRC bool
+
 	mu      sync.Mutex
 	max     int
 	seq     uint64
@@ -590,6 +597,11 @@ func (c *FormatCache) expand(meter string, ci byte, apl []byte, enc bool, encLen
 			return nil, sig, ErrFormatUnknown
 		}
 		full, err := Rebuild(f, data, ffc, encEnd)
+		if errors.Is(err, ErrFullFrameCRC) && c.IgnoreFullFrameCRC {
+			if lenient, lerr := rebuildAny(f, data, encEnd); lerr == nil {
+				return lenient, sig, ErrFullFrameCRCIgnored
+			}
+		}
 		if err != nil {
 			c.Forget(meter, sig)
 			return nil, sig, err
@@ -604,6 +616,9 @@ type CompactInfo struct {
 	Kind      string // "full", "compact" or "format"
 	Signature uint16
 	Known     bool // a compact frame's format was known
+	// Warning is set when a frame was let through by a lenient option
+	// (FormatCache.IgnoreFullFrameCRC).
+	Warning string
 }
 
 // Complete finishes a telegram that Decode left with ErrCompactFrame (or
@@ -629,6 +644,11 @@ func (c *FormatCache) Complete(tg *Telegram, decodeErr error) (CompactInfo, erro
 	}
 	full, sig, err := c.expand(tg.Meter.Key(), tg.CI, tg.APL, check, encLen)
 	info.Signature = sig
+	if err == ErrFullFrameCRCIgnored {
+		info.Warning = WarnFullFrameCRC
+		tg.Warnings = append(tg.Warnings, WarnFullFrameCRC)
+		err = nil
+	}
 	if err != nil {
 		return info, err
 	}
@@ -639,4 +659,33 @@ func (c *FormatCache) Complete(tg *Telegram, decodeErr error) (CompactInfo, erro
 	tg.APL = full
 	tg.Records, err = records.ParseRecords(full)
 	return info, err
+}
+
+// WarnFullFrameCRC is the warning of a compact frame rebuilt although its
+// Full-Frame-CRC did not match (FormatCache.IgnoreFullFrameCRC).
+const WarnFullFrameCRC = "full-frame-crc-ignored: the rebuilt records do not match the compact frame's Full-Frame-CRC; the format may be outdated"
+
+// ErrFullFrameCRCIgnored comes with the rebuilt records from Expand and
+// ExpandEncrypted when FormatCache.IgnoreFullFrameCRC let a frame through
+// whose Full-Frame-CRC did not match: the records are returned, and the
+// error is the warning. (Complete turns it into Warnings.)
+var ErrFullFrameCRCIgnored = errors.New(WarnFullFrameCRC)
+
+// rebuildAny rebuilds without the Full-Frame-CRC check.
+func rebuildAny(format, data []byte, encEnd int) ([]byte, error) {
+	entries, err := parseFormat(format)
+	if err != nil {
+		return nil, err
+	}
+	var firstErr error
+	for _, eat := range []bool{true, false} {
+		full, err := rebuild(entries, data, encEnd, eat)
+		if err == nil {
+			return full, nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	return nil, firstErr
 }

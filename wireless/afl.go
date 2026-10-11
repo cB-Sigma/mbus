@@ -59,6 +59,12 @@ type Decoder struct {
 	MAC2Key func(meter Header) []byte
 	// DESKey returns the 8-byte DES key of the deprecated modes 2 and 3.
 	DESKey func(meter Header) []byte
+	// DESCheck2F2F also accepts a mode 2 telegram whose decrypted data
+	// begins with two idle fillers (2F2Fh) when the meter's ID is not in
+	// it, as wmbusmeters does. Off by default: the ID is the check
+	// EN 13757-7 gives, and two fixed bytes are a weaker one. A telegram
+	// accepted this way is marked "des-id" in Security.Unverified.
+	DESCheck2F2F bool
 	// TLS processes security mode 13 records for the meter's TLS channel
 	// (mode13.go); nil refuses mode 13.
 	TLS TLSHandler

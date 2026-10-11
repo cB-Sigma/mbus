@@ -240,7 +240,8 @@ func IsHexText(b []byte) bool {
 // framings (Framer*): WithL says the receiver's telegrams start with their
 // L field (iM871A and Amber; otherwise it is computed), RSSIByte that an
 // Amber stick appends an RSSI byte, Format how many bytes follow L in the
-// raw framing. A hex stream skips lines without a telegram.
+// raw framing. The line framings (hex, CUL, rtl-wmbus) skip lines without
+// a telegram.
 type Reader struct {
 	Framer   string
 	WithL    bool
@@ -275,7 +276,14 @@ func (rd *Reader) Read() (Received, error) {
 		if line == "" {
 			continue
 		}
-		if t, perr := ParseHexLine(line); perr == nil {
+		parse := ParseHexLine
+		switch rd.Framer {
+		case FramerCUL:
+			parse = ParseCULLine
+		case FramerRTLWMBUS:
+			parse = ParseRTLWMBUSLine
+		}
+		if t, perr := parse(line); perr == nil {
 			return t, nil
 		}
 	}

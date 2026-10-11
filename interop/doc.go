@@ -12,8 +12,9 @@
 //     driver tests (tests/generated_tests.xmq and the "// Test:" blocks of
 //     its C++ drivers) and of its simulation files are decoded with
 //     package wireless, with the AES keys the tests give, and the meter
-//     identity, medium and common values are compared with the JSON
-//     wmbusmeters prints for them.
+//     identity, medium and common values, and every value read by
+//     package meters' drivers, are compared with the JSON wmbusmeters
+//     prints for them.
 //
 // No data of either project is kept in this repository: the tests clone
 // the pinned tag at run time, check the commit, read the files as data and

@@ -60,6 +60,8 @@ type Telegram struct {
 	// APL is the application layer after decryption, idle fillers kept.
 	APL     []byte
 	Records []records.Record
+	// Warnings name what a lenient option let through (Warn*).
+	Warnings []string
 }
 
 // ELL is the extended link layer (EN 13757-4:2025, 13.2).
@@ -97,12 +99,16 @@ type AFL struct {
 
 // Error kinds a caller may count.
 var (
-	ErrNoKey      = errors.New("the telegram is encrypted and no key is configured for this meter")
-	ErrDecrypt    = errors.New("decryption failed: the key is wrong (no 2F2F after decrypting)")
-	ErrMAC        = errors.New("the telegram's MAC does not verify")
-	ErrUnsupport  = errors.New("unsupported")
-	errTruncated  = errors.New("the telegram ends inside a header")
-	errShortFrame = errors.New("the telegram has no CI field")
+	ErrNoKey     = errors.New("the telegram is encrypted and no key is configured for this meter")
+	ErrDecrypt   = errors.New("decryption failed: the key is wrong (no 2F2F after decrypting)")
+	ErrMAC       = errors.New("the telegram's MAC does not verify")
+	ErrUnsupport = errors.New("unsupported")
+	// ErrManufacturerCI is returned (with ErrUnsupport) for a
+	// manufacturer-specific CI field (A0h to B7h); Telegram.APL then holds
+	// what follows the CI field, undecoded.
+	ErrManufacturerCI = errors.New("manufacturer-specific CI field")
+	errTruncated      = errors.New("the telegram ends inside a header")
+	errShortFrame     = errors.New("the telegram has no CI field")
 )
 
 // Decode checks and removes CRCs, then decodes headers, decrypts with the
@@ -204,12 +210,24 @@ func (d *Decoder) Decode(frame []byte, format FrameFormat, keys KeyLookup) (*Tel
 			tg.APL = append([]byte(nil), p...)
 			return tg, nil
 		}
+		if tg.CI >= 0xA0 && tg.CI <= 0xB7 {
+			// The manufacturer's own layout: APL keeps it for a meter
+			// driver (package meters).
+			tg.APL = append([]byte(nil), p...)
+			return tg, fmt.Errorf("%w: %w 0x%02X", ErrUnsupport, ErrManufacturerCI, tg.CI)
+		}
 		return tg, fmt.Errorf("%w: CI field 0x%02X", ErrUnsupport, tg.CI)
 	}
 	if tg.HeaderKind != "none" {
 		tg.Mode = int(tg.Config >> 8 & 0x1F)
 	}
+	raw := p
 	if p, err = tg.secure(d, p, tpl, keys); err != nil {
+		if errors.Is(err, ErrSecurityMode) {
+			// A mode outside EN 13757-7 (a manufacturer's own scheme):
+			// APL keeps the bytes as received for a meter driver.
+			tg.APL = append([]byte(nil), raw...)
+		}
 		return tg, err
 	}
 	tg.APL = p

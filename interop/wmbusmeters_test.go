@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cB-Sigma/mbus/meters"
 	"github.com/cB-Sigma/mbus/records"
 	"github.com/cB-Sigma/mbus/wired"
 	"github.com/cB-Sigma/mbus/wireless"
@@ -392,6 +393,7 @@ const (
 	wmProprietary = "proprietary payload that the wmbusmeters driver cuts up by byte position (match_entire_payload or match_entire_frame in its driver file); not M-Bus data records"
 	wmDiehl       = "Diehl group telegram (CI 7Ah, configuration field bit 12): the manufacturer's own scheme, which EN 13757-7 reserves as security modes 16-31"
 	wmBroken      = "telegram broken on purpose (simulation_broken.txt says so)"
+	wmTheirError  = "a telegram too short for its layout, for which wmbusmeters itself prints a decoding error"
 	wmTail        = "the data records decode, then the last bytes of the application data do not (in these telegrams 2 or 3 bytes after the last record: an FFFFh filler or what looks like a CRC left in the stored telegram); we return the records with an error, wmbusmeters reports the values"
 	wmFixedL      = "the test telegram's L field disagrees with its length; the harness set L to the length"
 	wmEnhancedID  = "the driver takes the meter's id from an enhanced identification record (VIF 79h) of a Qundis walk-by telegram, not from the link or TPL address; medium and values not compared"
@@ -409,6 +411,9 @@ type wmTally struct {
 	mediumSkipped                               int
 	fields, fieldEq, fieldDiff, fieldNoMatch    int
 	fieldExplained, fieldElsewhere              int
+	byDriver, allFields, allEq, allMissing      int
+	invalidDates, lenient                       int
+	missing                                     map[string]int // by "our driver/their driver"
 	drivers                                     wmDrivers
 	unexplained                                 []string
 	notes                                       []string
@@ -417,6 +422,18 @@ type wmTally struct {
 // TestWmbusmetersTelegrams: interop with wmbusmeters 3.0.0 driver tests and simulations (wireless and wired decoding)
 func TestWmbusmetersTelegrams(t *testing.T) {
 	root := checkout(t, wmbusmeters)
+	// wmbusmeters' test data stores some Diehl telegrams unscrambled.
+	meters.AcceptPlainDiehl = true
+	defer func() { meters.AcceptPlainDiehl = false }()
+	// The Diehl group's default keys are not shipped with the library:
+	// they are read from the wmbusmeters checkout, as a user would supply
+	// them, and only for this run.
+	if k, err := diehlKeysFrom(root); err != nil {
+		t.Logf("Diehl default keys not found in the checkout (%v): scrambled Diehl telegrams stay undecoded", err)
+	} else {
+		meters.SetMakerKeys(k)
+		defer meters.SetMakerKeys(meters.MakerKeys{})
+	}
 	cases, err := parseXMQTests(filepath.Join(root, "tests", "generated_tests.xmq"))
 	if err != nil {
 		t.Fatal(err)
@@ -476,7 +493,7 @@ func TestWmbusmetersTelegrams(t *testing.T) {
 	}
 	// The same telegram appears in several files: decode each once.
 	seen := map[string]bool{}
-	c := wmTally{failed: map[string]int{}, drivers: drivers}
+	c := wmTally{failed: map[string]int{}, missing: map[string]int{}, drivers: drivers}
 	for _, tc := range cases {
 		h := strings.ToUpper(tc.hex)
 		if seen[h] || h == "" {
@@ -515,6 +532,17 @@ func TestWmbusmetersTelegrams(t *testing.T) {
 		c.decrypted, c.withKey, c.plain, c.compact, c.tail, c.fixedL)
 	t.Logf("meter id: %d equal, %d differ, %d from an enhanced identification record; manufacturer,version,type among the driver's detect list: %d, not (driver named explicitly): %d; medium: %d equal, %d differ, %d not compared; fields: %d compared, %d equal, %d differ (%d of them explained), %d with no plain record of that quantity at storage 0 (in %d of them a record with a tariff or modifier holds the value)",
 		c.idEq, c.idDiff, c.idOther, c.mvtEq, c.mvtOther, c.mediumEq, c.mediumDiff, c.mediumSkipped, c.fields, c.fieldEq, c.fieldDiff, c.fieldExplained, c.fieldNoMatch, c.fieldElsewhere)
+	t.Logf("decoded only with an opt-in lenient option (FormatCache.IgnoreFullFrameCRC, which wmbusmeters' behaviour matches): %d", c.lenient)
+	t.Logf("meter drivers (package meters): %d frames the decoder left were read by a driver; every field wmbusmeters prints (numbers by unit, dates): %d compared, %d found among our values, %d not; %d dates coded invalid that wmbusmeters prints as dates (year 2100 or later, month 13 or more) not compared",
+		c.byDriver, c.allFields, c.allEq, c.allMissing, c.invalidDates)
+	mk := make([]string, 0, len(c.missing))
+	for k := range c.missing {
+		mk = append(mk, k)
+	}
+	sort.Strings(mk)
+	for _, k := range mk {
+		t.Logf("fields not found, %s: %d", k, c.missing[k])
+	}
 	keys := make([]string, 0, len(c.failed))
 	for k := range c.failed {
 		keys = append(keys, k)
@@ -554,9 +582,22 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 	var key []byte
 	// A fresh Decoder per telegram: no counters carried between tests. A
 	// 16-byte key is AES, an 8-byte key the DES of modes 2 and 3.
+	// The test's AES key, else a maker's published default key (Diehl's,
+	// as wmbusmeters adds it).
+	noDefault := false
+	aesKey := func(h wireless.Header) []byte {
+		if k := sized(key, 16); k != nil {
+			return k
+		}
+		if noDefault || key != nil {
+			return nil
+		}
+		return meters.DefaultKey(h)
+	}
 	dec := func(f []byte, ff wireless.FrameFormat) (*wireless.Telegram, error) {
-		d := &wireless.Decoder{DESKey: func(wireless.Header) []byte { return sized(key, 8) }}
-		return d.Decode(f, ff, func(wireless.Header) []byte { return sized(key, 16) })
+		// DESCheck2F2F: accept DES mode 2 by its 2F2F as wmbusmeters does.
+		d := &wireless.Decoder{DESKey: func(wireless.Header) []byte { return sized(key, 8) }, DESCheck2F2F: true}
+		return d.Decode(f, ff, aesKey)
 	}
 	cache := wireless.NewFormatCache(16)
 	if len(frames) > 1 {
@@ -576,6 +617,7 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 		}
 	}
 	var last *wireless.Telegram
+	var lastReading *meters.Reading
 	for n, b := range frames {
 		c.telegrams++
 		c.wireless++
@@ -588,6 +630,7 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 			key = cands[0]
 		}
 		tg, err := dec(b, wireless.FormatAuto)
+		var reading *meters.Reading
 		desCheck, ffcFail := false, false
 		// A wrong key of the test scripts: try the meter's other keys.
 		for i := 1; i < len(cands) && (errors.Is(err, wireless.ErrDecrypt) || errors.Is(err, wireless.ErrMAC)); i++ {
@@ -603,6 +646,12 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 				desCheck = bytes.HasPrefix(p, []byte{0x2F, 0x2F}) && !bytes.Contains(p, tg.Meter.A[:4])
 			}
 			key = nil
+			tg, err = dec(b, wireless.FormatAuto)
+		}
+		if len(cands) == 0 && (errors.Is(err, wireless.ErrDecrypt) || errors.Is(err, wireless.ErrMAC)) {
+			// The maker's default key does not fit: not that key's
+			// telegram (or one stored decrypted).
+			noDefault = true
 			tg, err = dec(b, wireless.FormatAuto)
 		}
 		fixedL := false
@@ -631,12 +680,31 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 		if tg != nil && (err == nil || errors.Is(err, wireless.ErrCompactFrame)) {
 			_, err = cache.Complete(tg, err)
 			if err != nil && isCompact(tg.CI) {
+				if len(driverFormats) == 0 {
+					// A simulation file names no driver: take the formats
+					// of the driver that detects the meter.
+					driverFormats = formatsByMVT(c, tg)
+				}
 				for _, f := range driverFormats {
 					cache.Put(tg.Meter.Key(), f)
 				}
 				_, err = cache.Complete(tg, wireless.ErrCompactFrame)
 				if errors.Is(err, wireless.ErrFullFrameCRC) {
-					ffcFail = true
+					// wmbusmeters does not check that CRC: with the opt-in
+					// IgnoreFullFrameCRC the frame decodes, with a warning.
+					lc := wireless.NewFormatCache(16)
+					lc.IgnoreFullFrameCRC = true
+					for _, f := range driverFormats {
+						lc.Put(tg.Meter.Key(), f)
+					}
+					if _, lerr := lc.Complete(tg, wireless.ErrCompactFrame); lerr == nil && len(tg.Warnings) > 0 {
+						err = nil
+						c.lenient++
+						c.notes = append(c.notes, fmt.Sprintf("%s (%s): decoded only with FormatCache.IgnoreFullFrameCRC (warning: %s)", where, tc.driver, tg.Warnings[0]))
+					} else {
+						ffcFail = true
+						c.notes = append(c.notes, fmt.Sprintf("%s (%s): IgnoreFullFrameCRC does not help: %v", where, tc.driver, lerr))
+					}
 				}
 			}
 			if err == nil && isCompact(tg.CI) {
@@ -644,6 +712,15 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 			}
 		}
 		tail := false
+		if err != nil && tg != nil {
+			// A meter driver (package meters) may read what the decoder
+			// leaves: a manufacturer's payload or security scheme.
+			if rd, rerr := meters.ReadKeys(tg, err, aesKey); rerr == nil && rd.Driver != "" {
+				c.byDriver++
+				c.notes = append(c.notes, fmt.Sprintf("%s (%s): read by driver %s (decoder: %v)", where, tc.driver, rd.Driver, err))
+				err, reading = nil, rd
+			}
+		}
 		if err != nil {
 			cat := ""
 			switch {
@@ -651,6 +728,8 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 				cat = wmFFC
 			case desCheck:
 				cat = wmDES
+			case strings.Contains(fmt.Sprint(tc.json["status"]), "DECODING_ERROR"):
+				cat = wmTheirError
 			case c.drivers.proprietary[tc.driver]:
 				cat = wmProprietary
 			case errors.Is(err, wireless.ErrNoKey):
@@ -673,6 +752,10 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 				}
 				c.failed[cat]++
 				c.notes = append(c.notes, fmt.Sprintf("%s (%s): not decoded: %v [%s]", where, tc.driver, err, cat))
+				if tc.json != nil && n == len(frames)-1 {
+					// Its fields count as not found.
+					wmCompareReading(c, tc, &meters.Reading{Driver: "(not read)"})
+				}
 				return
 			}
 			c.tail++
@@ -695,14 +778,23 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 			c.notes = append(c.notes, fmt.Sprintf("%s (%s): decoded after setting L to the telegram's length [%s]", where, tc.driver, wmFixedL))
 		}
 		last = tg
+		if reading == nil {
+			// The records decoded (a tail error keeps those before it).
+			reading, _ = meters.ReadKeys(tg, nil, aesKey)
+		}
+		lastReading = reading
 	}
 	if last == nil || tc.json == nil {
 		return
 	}
 	tg := last
+	wmCompareReading(c, tc, lastReading)
+	if os.Getenv("SIGMA_MBUS_INTEROP_MVT") != "" && lastReading != nil {
+		c.notes = append(c.notes, fmt.Sprintf("MVT %s %s,%02X,%02X", tc.driver, lastReading.Manufacturer, lastReading.Version, lastReading.SentDeviceType))
+	}
 	if id, _ := tc.json["id"].(string); id != "" {
 		switch {
-		case id == tg.Meter.ID || id == tg.ID:
+		case strings.EqualFold(id, tg.Meter.ID) || strings.EqualFold(id, tg.ID) || lastReading != nil && strings.EqualFold(id, lastReading.ID):
 			c.idEq++
 		case hasEnhancedID(tg.Records, id):
 			c.idOther++
@@ -712,6 +804,13 @@ func wmWireless(c *wmTally, tc wmCase, frames [][]byte, driverFormats [][]byte) 
 			c.idDiff++
 			c.unexplained = append(c.unexplained, fmt.Sprintf("%s (%s): id %s (link %s), wmbusmeters %s", tc.where, tc.driver, tg.Meter.ID, tg.ID, id))
 		}
+	}
+	if lastReading != nil && lastReading.Driver != "" {
+		// The driver gives the device type and address as the maker means them.
+		wmCompareMedium(c, tc, []byte{lastReading.DeviceType})
+		wmCompareMVT(c, tc, wireless.Header{Manufacturer: lastReading.Manufacturer, Version: lastReading.Version, DeviceType: lastReading.SentDeviceType}, tg.Meter, tg.Header)
+		wmCompareFields(c, tc, lastReading.Records)
+		return
 	}
 	wmCompareMedium(c, tc, []byte{tg.Meter.DeviceType, tg.DeviceType})
 	wmCompareMVT(c, tc, tg.Meter, tg.Header)
@@ -781,6 +880,120 @@ func wmWired(c *wmTally, tc wmCase, b []byte) {
 	}
 	wmCompareMedium(c, tc, []byte{r.Address.Medium})
 	wmCompareFields(c, tc, r.Records)
+	wmCompareReading(c, tc, meters.ReadRecords(records.ManufacturerCode(r.Address.Manufacturer), r.Address.ID, r.Address.Version, r.Address.Medium, r.Records))
+}
+
+// suffixUnit is the factor from one of our units to the unit a
+// wmbusmeters field name ends with.
+func suffixUnit(ours, suffix string) (float64, bool) {
+	if f, ok := toUnit(ours, suffix); ok {
+		return f, true
+	}
+	f, ok := map[[2]string]float64{
+		{"L", "m3"}: 1e-3, {"kWh", "kwh"}: 1, {"GJ", "gj"}: 1, {"kW", "kw"}: 1,
+		{"a", "y"}: 1, {"s", "s"}: 1, {"min", "s"}: 60, {"h", "s"}: 3600, {"d", "s"}: 86400,
+		{"d", "d"}: 1, {"a", "d"}: 365, {"d", "y"}: 1 / 365.2422, {"mo", "month"}: 1,
+		{"V", "v"}: 1, {"A", "a"}: 1, {"Hz", "hz"}: 1, {"bar", "bar"}: 1, {"%RH", "rh"}: 1, {"%", "pct"}: 1,
+		{"%", "rh"}: 1, {"", "counter"}: 1, {"", "nr"}: 1, {"", "factor"}: 1, {"kvarh", "kvarh"}: 1, {"kVAh", "kvah"}: 1,
+		{"varh", "kvarh"}: 1e-3, {"VAh", "kvah"}: 1e-3, {"m3/h", "m3h"}: 1, {"L/h", "m3h"}: 1e-3,
+		{"Cel", "c"}: 1, {"K", "c"}: 1, {"m3", "m3"}: 1, {"Wh", "kwh"}: 1e-3, {"W", "kw"}: 1e-3,
+	}[[2]string{ours, suffix}]
+	return f, ok
+}
+
+var dateLike = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$`)
+
+// wmCompareReading compares every numeric field and every date
+// wmbusmeters prints with the values of our reading (records and driver):
+// a field is found when a value of a matching unit equals it (dates by
+// text, to the minute). Names are not compared: the two projects name
+// values differently.
+func wmCompareReading(c *wmTally, tc wmCase, rd *meters.Reading) {
+	if rd == nil {
+		return
+	}
+	names := make([]string, 0, len(tc.json))
+	for k := range tc.json {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	var missing []string
+	for _, name := range names {
+		switch name {
+		case "timestamp", "id", "name", "meter", "media", "_":
+			continue
+		}
+		want := tc.json[name]
+		if s, ok := want.(string); ok {
+			if !dateLike.MatchString(s) {
+				continue
+			}
+			if y, _ := strconv.Atoi(s[:4]); y >= 2100 || s[5:7] > "12" {
+				// wmbusmeters prints a date coded invalid (all ones) as a
+				// date; our records mark it invalid.
+				c.invalidDates++
+				continue
+			}
+			c.allFields++
+			found := false
+			for _, v := range rd.Values {
+				if o, ok := v.Value.(string); ok && dateLike.MatchString(o) && sameDate(o, s) {
+					found = true
+					break
+				}
+			}
+			if found {
+				c.allEq++
+			} else {
+				missing = append(missing, fmt.Sprintf("%s=%s", name, s))
+			}
+			continue
+		}
+		w, ok := number(want)
+		if !ok {
+			continue
+		}
+		i := strings.LastIndex(name, "_")
+		if i < 0 {
+			continue
+		}
+		suffix := name[i+1:]
+		c.allFields++
+		found := false
+		for _, v := range rd.Values {
+			x, ok := number(v.Value)
+			if !ok {
+				continue
+			}
+			f, ok := suffixUnit(v.Unit, suffix)
+			if ok && nearRel(x*f, w) {
+				found = true
+				break
+			}
+		}
+		if found {
+			c.allEq++
+		} else {
+			missing = append(missing, fmt.Sprintf("%s=%v", name, w))
+		}
+	}
+	c.allMissing += len(missing)
+	if len(missing) > 0 {
+		c.missing[rd.Driver+"/"+tc.driver] += len(missing)
+		c.notes = append(c.notes, fmt.Sprintf("%s (%s, our driver %q): not among our values: %s", tc.where, tc.driver, rd.Driver, strings.Join(missing, ", ")))
+	}
+}
+
+// sameDate compares two date texts to the minute.
+func sameDate(a, b string) bool {
+	n := func(s string) string {
+		s = strings.Replace(s, " ", "T", 1)
+		if len(s) > 16 {
+			s = s[:16]
+		}
+		return s
+	}
+	return n(a) == n(b)
 }
 
 func wmCompareMedium(c *wmTally, tc wmCase, ours []byte) {
@@ -887,4 +1100,48 @@ func wmCompareFields(c *wmTally, tc wmCase, recs []records.Record) {
 			}
 		}
 	}
+}
+
+// diehlKeysFrom reads the Diehl group's two default keys from
+// wmbusmeters' src/manufacturer_specificities.cc ("#define
+// PRIOS_DEFAULT_KEY1 ..."): both seed the scrambling, the second doubled
+// is the default AES key, as wmbusmeters uses them.
+func diehlKeysFrom(root string) (meters.MakerKeys, error) {
+	b, err := os.ReadFile(filepath.Join(root, "src", "manufacturer_specificities.cc"))
+	if err != nil {
+		return meters.MakerKeys{}, err
+	}
+	re := regexp.MustCompile(`#define PRIOS_DEFAULT_KEY([12])\s+"([0-9A-Fa-f]{16})"`)
+	var k meters.MakerKeys
+	found := map[string][]byte{}
+	for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+		v, err := hex.DecodeString(m[2])
+		if err != nil {
+			return k, err
+		}
+		found[m[1]] = v
+	}
+	if found["1"] == nil || found["2"] == nil {
+		return k, errors.New("PRIOS_DEFAULT_KEY1 and KEY2 not defined")
+	}
+	k.DiehlScrambling = [][]byte{found["1"], found["2"]}
+	k.DiehlAES = append(append([]byte(nil), found["2"]...), found["2"]...)
+	return k, nil
+}
+
+// formatsByMVT gives the compact-frame formats of the wmbusmeters driver
+// whose detect list holds the meter's manufacturer, version and type.
+func formatsByMVT(c *wmTally, tg *wireless.Telegram) [][]byte {
+	s := fmt.Sprintf("%s,%02X,%02X", tg.Meter.Manufacturer, tg.Meter.Version, tg.Meter.DeviceType)
+	names := make([]string, 0, len(c.drivers.mvt))
+	for n := range c.drivers.mvt {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if slices.Contains(c.drivers.mvt[n], s) && len(c.drivers.formats[n]) > 0 {
+			return c.drivers.formats[n]
+		}
+	}
+	return nil
 }

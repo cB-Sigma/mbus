@@ -9,7 +9,7 @@ require github.com/cB-Sigma/mbus v0.0.0
 
 require (
 	github.com/cB-Sigma/dlms v0.1.0 // indirect
-	github.com/cB-Sigma/iotcrypto v0.1.1 // indirect
+	github.com/cB-Sigma/iotcrypto v0.1.0 // indirect
 	github.com/cB-Sigma/tlsx v0.6.0 // indirect
 	github.com/goburrow/serial v0.1.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect

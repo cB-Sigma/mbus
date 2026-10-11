@@ -500,10 +500,15 @@ func (tg *Telegram) modeDES(d *Decoder, s *Security, p, _ []byte) ([]byte, error
 	}
 	if tg.Mode == 2 {
 		dec, ok := try(make([]byte, 8))
-		if !ok {
+		switch {
+		case ok:
+			s.Verified = append(s.Verified, "decrypt-id")
+		case d != nil && d.DESCheck2F2F && bytes.HasPrefix(dec, []byte{0x2F, 0x2F}):
+			s.Verified = append(s.Verified, "decrypt-2f2f")
+			s.Unverified = append(s.Unverified, "des-id")
+		default:
 			return nil, ErrDecrypt
 		}
-		s.Verified = append(s.Verified, "decrypt-id")
 		tg.Encrypted = true
 		s.aplEnc = n
 		return append(dec, p[n:]...), nil

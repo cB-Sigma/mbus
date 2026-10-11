@@ -53,6 +53,13 @@ type Record struct {
 	Flags []string
 	// action is the object action code + 1 (6.4.7), 0 when none.
 	action int
+	// BaseValue is, for a record whose VIF is followed by a manufacturer-
+	// specific VIFE (7Fh or FFh), the data decoded as the VIF before it
+	// says (number and Unit), nil otherwise. Value keeps the data raw: the
+	// manufacturer may give the VIFE a meaning that changes the value
+	// (commonly it only marks a phase or a variant).
+	BaseValue any
+	base      *vifInfo
 	// declared is the OBIS code a declaration record gave this record
 	// (annex H.3, ApplyOBISDeclarations).
 	declared *obis.Code
@@ -209,6 +216,18 @@ func parseRecords(p []byte) ([]Record, error) {
 		r.Raw = append([]byte(nil), p[i:i+n]...)
 		i += n
 		v.decode(&r, dif&0x0F, lvar)
+		if r.base != nil {
+			q := r.Quantity
+			if bv, ok := r.base.value(&r, dif&0x0F, lvar, r.Raw); ok {
+				if r.base.bin2 != 0 {
+					if x, isInt := bv.(int64); isInt {
+						bv = math.Ldexp(float64(x), r.base.bin2)
+					}
+				}
+				r.BaseValue = bv
+			}
+			r.Quantity, r.base = q, nil
+		}
 		out = append(out, r)
 	}
 	return out, nil
@@ -527,6 +546,10 @@ func (r *Record) combinable(p []byte, i int, v *vifInfo) (int, error) {
 			mod("mfct")
 			mfct = true
 			r.Manufacturer = true
+			if r.base == nil && v.kind != vkHex {
+				base := *v
+				r.base = &base
+			}
 			v.kind = vkHex
 		default: // reserved (4Ch, 4Dh)
 			mod(fmt.Sprintf("vife%02x", c))
@@ -962,4 +985,18 @@ func ResourceSafe(s string) string {
 		}
 	}
 	return string(b)
+}
+
+// TypeG formats a 2-byte date of type G (EN 13757-3 annex A) as
+// YYYY-MM-DD, or "" when it codes no date.
+func TypeG(b []byte) string {
+	if len(b) < 2 {
+		return ""
+	}
+	v, ok := dateG(b)
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
 }

@@ -27,6 +27,48 @@ link layer and procedures moved out of the adapter), the receiver
 `Reader`, the package documentation, the examples and the tests
 marked as new.
 
+### v0.2.0 (2026-10-11)
+
+New files, "Copyright 2026 Abhinav Gautam": the `meters` package,
+wireless/stick.go and delay.go, records' `BaseValue`, and their tests.
+
+- **Meter drivers (`meters`).** The manufacturers' payload layouts are
+  facts (byte positions, scales, bit meanings, the Diehl group's
+  scrambling register); the code and the
+  value names are ours. The layouts were worked out from the published
+  test telegrams of wmbusmeters and the values it prints for them, and,
+  where a telegram alone did not settle a position or a scale, the facts
+  were read from wmbusmeters' driver descriptions (drivers/src/*.xmq,
+  src/driver_izar.cc, src/driver_qwater.cc, src/driver_qheat.cc,
+  src/manufacturer_specificities.cc; GPL-3.0). No
+  code, grammar, field name, lookup table or text of wmbusmeters was
+  copied; the Go code is written from scratch around the facts and
+  checked against the telegrams at run time (`interop/`), none of which
+  is kept here. **No keys ship with the library:** the Diehl group's
+  default scrambling and AES keys are supplied by the user
+  (`SetMakerKeys`); the interop test reads them from the wmbusmeters
+  checkout at run time, and the unit tests use keys of their own. One
+  layout was left out because its only description is
+  a table of constants in wmbusmeters' driver (the RFM-TX1 volume). The
+  manufacturer, version and device type combinations of the named
+  models are those of the published test telegrams; the model names are
+  the makers' product names.
+- **Receiver sticks.** Command and mode codes are the makers' published
+  interface facts: IMST's WiMOD wM-Bus HCI (iM871A device management
+  messages and link modes), Würth Elektronik's AMB8465 manual (command
+  mode set-mode request, its confirmation and mode codes), the culfw
+  command reference (brt, brs, brc, X21 and the "b" lines with LQI and
+  RSSI) and the rtl-wmbus README (its output line); the codes were
+  cross-checked against wmbusmeters' stick drivers (facts only). Not
+  checked against real sticks.
+- **Response delays** (`ResponseDelay`): EN 13757-4:2025 tables 5, 8
+  and 15 (tRO of modes S, T and C, fast and slow). **Address 251**:
+  EN 13757-2:2018+A1:2023 5.7.5, which reserves it and defines no
+  commands.
+- **DES mode 2 by its 2F2F fillers** (`DESCheck2F2F`, off by default):
+  what wmbusmeters accepts; our default check stays the meter ID of
+  EN 13757-7:2025 9.4.3.2.
+
 The simulators (the wired bus, the wireless meter and the receiver
 stick) and their commands were written with the decoders and moved into
 the separate mbus-sim module on 2026-10-11, with the tests that drive
@@ -75,6 +117,10 @@ kept in the repository or redistributed.
   TestHeatMeterRecordsSelfMade: 12-digit BCD energy with VIF 01h, stored
   values of storages 1 and 17, an all-ones date, external temperature,
   operating time, manufacturer data).
+- **Meter drivers**: meters/meters_test.go builds telegrams in each
+  layout with values chosen for the tests (no wmbusmeters telegram is
+  included); wmbusmeters' telegrams are read only at run time by
+  `interop/`.
 - Everything else is written for the tests. Keys are test values.
 
 ## SigmaM2M traces

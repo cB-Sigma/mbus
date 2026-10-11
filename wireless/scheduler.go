@@ -100,6 +100,16 @@ type Scheduler struct {
 	// on (it sent a following step), event is run with the other events.
 	// Nil drops the request without an event.
 	App func(dev string, p *Pending, tg *Telegram) (keep bool, event func())
+	// LinkMode ("S2", "T2", "C2"), when set, times each frame into the
+	// meter's response window (ResponseDelay): After waits until the
+	// window's middle, counted from its call, less StickLatency (the
+	// time the receiver took to deliver the telegram and will take to send
+	// the frame). Empty sends at once, for sticks that time the answer
+	// themselves.
+	LinkMode     string
+	StickLatency time.Duration
+	// Wait sleeps (tests); nil is time.Sleep.
+	Wait func(time.Duration)
 
 	mu    sync.Mutex
 	w     io.Writer
@@ -260,6 +270,13 @@ func (s *Scheduler) After(dev string, tg *Telegram, direct bool) []func() {
 		open := p.Frame.C == CCnfIR && tg.C == CSndIR ||
 			p.Frame.C != CCnfIR && linkBidirectional(tg) && tg.C&CPRM != 0 // omsci.go
 		if open {
+			if d := s.responseWait(tg, now, time.Now()); d > 0 {
+				if s.Wait != nil {
+					s.Wait(d)
+				} else {
+					time.Sleep(d)
+				}
+			}
 			ev, ok := s.send(dev, tg, p, w, now)
 			if !ok {
 				keep = slices.DeleteFunc(keep, func(x *Pending) bool { return x == p })

@@ -21,6 +21,20 @@ holds the VIF and VIFE codes of EN 13757-3:2025 clause 6.4 with names
 and units in our own words. No text of the standards is reproduced, and
 none of them is redistributed. See PROVENANCE.md.
 
+Meter drivers and receiver sticks
+---------------------------------
+
+The meters package reads manufacturers' payload layouts, and
+wireless/stick.go speaks receiver sticks' command interfaces. Both are
+written from facts (byte positions, scales, bit meanings, command and
+mode codes); some of those
+facts were read from wmbusmeters (https://github.com/wmbusmeters/
+wmbusmeters, GPL-3.0-or-later) and from the makers' documents, as
+PROVENANCE.md lists. No manufacturer keys are included: callers
+supply them. No code, grammar, table or text of wmbusmeters is
+included, and none of its test telegrams is kept in this repository (the
+interop tests fetch them at run time).
+
 Test data from third parties
 ----------------------------
 
@@ -88,3 +102,18 @@ Dependencies
 - golang.org/x/crypto and golang.org/x/sys (through tlsx and iotcrypto):
   BSD-3-Clause, Copyright The Go Authors.
 - Otherwise the Go standard library only.
+
+Trademarks
+----------
+
+Kamstrup, Techem, Apator, Diehl, Hydrometer, Sappel, IZAR, Qundis,
+Zenner, B METERS, BFW, Sensus, Itron, Elster, Landis+Gyr, Engelmann,
+Sontex, Axioma, Maddalena, Lansen, ista, Elvaco, ABB, Carlo Gavazzi,
+EMH, EBZ, Ei Electronics, GWF, Kaden, Weptech, Wehrle, Fiorentini and
+the other makers and product names in package meters belong to their
+owners. iM871A and WiMOD are IMST GmbH's; Amber and AMB8465 are Würth
+Elektronik eiSos's; CUL and culfw belong to their authors; rtl-wmbus to
+its author. OMS is a name of the OMS Group; EN 13757 is published by
+CEN. The names are used only to say which meters and receivers the code
+reads. This project is not affiliated with, certified by, sponsored or
+endorsed by any of them, and the drivers are not the makers' own.

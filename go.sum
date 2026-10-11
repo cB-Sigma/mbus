@@ -1,7 +1,7 @@
 github.com/cB-Sigma/dlms v0.1.0 h1:djIVM0ph6mRu0hscw5w1c5hVRS8Q1Q63nxVORiaT7eo=
 github.com/cB-Sigma/dlms v0.1.0/go.mod h1:rs2rIK843IcR1A5eyWI187eRmVD2BFznVF/veqPXNoM=
-github.com/cB-Sigma/iotcrypto v0.1.1 h1:3ifhrE8JPc3TaVIEqja+svXc7sBfY6u5/I5QFholCfY=
-github.com/cB-Sigma/iotcrypto v0.1.1/go.mod h1:SlKPoP00OgqfMJpaa+fNq0aqcoFhGU3NpyKCJ7UtR4g=
+github.com/cB-Sigma/iotcrypto v0.1.0 h1:dpW2jpBcwkug0bTz2qOvH7lp+rp+6eJxmugChP7f5tQ=
+github.com/cB-Sigma/iotcrypto v0.1.0/go.mod h1:SlKPoP00OgqfMJpaa+fNq0aqcoFhGU3NpyKCJ7UtR4g=
 github.com/cB-Sigma/tlsx v0.6.0 h1:P76L+FQdYrHlTI4LyzHRWDeK1F4vom7odZoLD0bhwTA=
 github.com/cB-Sigma/tlsx v0.6.0/go.mod h1:Ce5ibf1UB1/NcyWm2bcnW49nj0vP4b9KzfaOf3rNpx0=
 github.com/goburrow/serial v0.1.0 h1:v2T1SQa/dlUqQiYIT8+Cu7YolfqAi3K96UmhwYyuSrA=
